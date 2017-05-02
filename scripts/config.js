@@ -16274,6 +16274,10 @@ define('appConfig',{
 		{
 			"id": "generation",
 			"name": "Generation"
+		},
+		{
+			"id": "interstate_flow",
+			"name": "Interstate Flow"
 		}
 	],
 	"geographies": [
@@ -16291,7 +16295,7 @@ define('appConfig',{
 			"name": "Study Areas"
 		}
 	],
-	"initial_attribute": "generation",
+	"initial_attribute": "interstate_flow",
 	"initial_chart_attribute": "generation",
 	"initial_scenario": "test_2040",
 	"initial_scenario_2": "test_2040",
@@ -43697,7 +43701,7 @@ define('scripts/views/MapView',[
             lineStyle: {
                 width: {
                     min: 2,
-                    max: 40
+                    max: 20
                 },
                 opacity: {
                     min: 0.3,
@@ -43868,7 +43872,7 @@ define('scripts/views/MapView',[
             var flowTypes = Radio.request('flowTypes'),
                 lineWidth = this.mapOptions.lineStyle.width;
 
-            this.mapOptions.scales.lineData = d3.scale.linear()
+            this.mapOptions.scales.lineData = d3.scaleLinear()
                 .domain([0, dataMax])
                 .range([lineWidth.min, lineWidth.max]);
 
@@ -43884,7 +43888,7 @@ define('scripts/views/MapView',[
                 });
             });
 
-            this.mapOptions.scales.pointData = d3.scale.sqrt()
+            this.mapOptions.scales.pointData = d3.scaleSqrt()
                 .domain([0, exportsMax])
                 .range([pointRadius.min, pointRadius.max])
         },
@@ -43970,11 +43974,19 @@ define('scripts/views/MapView',[
                     }, [])
 
                 features = features.filter(function (f) {
-                    return (nodes.indexOf(f.id) !== -1) || (nodes.indexOf(f.id) !== -1);
+                    return nodes.indexOf(f.properties.name) !== -1;
+                }).map(function (f) {
+                    return _.extend(
+                        {},
+                        f,
+                        {
+                            id: f.properties.name
+                        }
+                    )
                 });
 
                 // Create the flow lines
-                var line = d3.svg.line()
+                var line = d3.line()
                     .x(function (d) {
                         return projection(d.geometry.coordinates)[0]
                     })
@@ -43983,25 +43995,28 @@ define('scripts/views/MapView',[
                     });
                 var lineScale = this.mapOptions.scales.lineData;
 
-                var dcLines = this.mapOptions.dcLines = rawData.Interstate_DC.reduce(function (agg, o) {
+                if (rawData.Interstate_DC) {
+                  var dcLines = this.mapOptions.dcLines = rawData.Interstate_DC.reduce(function (agg, o) {
                     var newAgg = agg.slice();
 
                     var hasFrom = newAgg.some(function (existingObj) {
-                        return existingObj.gid_from === o.gid_from;
+                      return existingObj.gid_from === o.gid_from;
                     });
                     var hasTo = newAgg.some(function (existingObj) {
-                        return existingObj.gid_to === o.gid_to;
+                      return existingObj.gid_to === o.gid_to;
                     });
 
                     if (!(hasFrom && hasTo)) {
-                        newAgg.push({
-                            gid_from: o.gid_from,
-                            gid_to: o.gid_to
-                        });
+                      newAgg.push({
+                        gid_from: o.gid_from,
+                        gid_to: o.gid_to
+                      });
                     }
 
                     return newAgg;
-                }, []);
+                  }, []);
+                }
+
                 var acLines = this.mapOptions.acLines = rawData.Interstate_AC.reduce(function (agg, o) {
                     var newAgg = agg.slice();
 
@@ -44048,19 +44063,22 @@ define('scripts/views/MapView',[
                     })
                     .attr('stroke-width', lineScale(0));
 
-                layer.selectAll('path.Interstate_DC')
-                    .data(dcLines, function (d) { return [d.gid_from, d.gid_to]; })
-                    .enter()
-                    .append('path')
-                    .classed('Interstate_DC', true)
-                    .attr("d", function (d) {
+                if (rawData.Interstate_DC) {
+                  layer.selectAll('path.Interstate_DC')
+                      .data(dcLines, function (d) { return [d.gid_from, d.gid_to]; })
+                      .enter()
+                      .append('path')
+                      .classed('Interstate_DC', true)
+                      .attr("d", function (d) {
                         var fromGeom = _.findWhere(features, {id: d.gid_from}),
                             toGeom = _.findWhere(features, {id: d.gid_to});
 
                         return line([fromGeom, toGeom])
-                    })
-                    .style('stroke', 'rgba(165,165,165,0.6)')
-                    .attr('stroke-width', lineScale(0));
+                      })
+                      .style('stroke', 'rgba(165,165,165,0.6)')
+                      .attr('stroke-width', lineScale(0));
+                }
+
             }
 
             switch (geomType) {
@@ -44280,53 +44298,62 @@ define('scripts/views/MapView',[
 
             // Render the flow lines
             var fc = Radio.request('data:datalayer'),
-                features = fc.features;
+                features = fc.features.map(function (f) {
+                    return _.extend(
+                        {},
+                        f,
+                        {
+                            id: f.properties.name
+                        }
+                    )
+                });
 
             var rawData = Radio.request('data:scenario');
 
 
-            var dcData = _.map(rawData.Interstate_DC, function (o) {
-                return {
-                    gid_from: o.gid_from,
-                    gid_to: o.gid_to,
-                    value: o.values[temporalIdx]
-                }
-            });
+            // var dcData = _.map(rawData.Interstate_DC, function (o) {
+            //     return {
+            //         gid_from: o.gid_from,
+            //         gid_to: o.gid_to,
+            //         value: o.values[temporalIdx]
+            //     }
+            // });
             var acData = _.map(rawData.Interstate_AC, function (o) {
+                var value = o.values[temporalIdx];
                 return {
-                    gid_from: o.gid_from,
-                    gid_to: o.gid_to,
-                    value: o.values[temporalIdx]
+                    gid_from: value >= 0 ? o.gid_from : o.gid_to,
+                    gid_to: value >= 0 ? o.gid_to : o.gid_from,
+                    value: Math.abs(o.values[temporalIdx])
                 }
             });
 
-            this.mapOptions.layers.line
-                .selectAll('.Interstate_DC')
-                .data(dcData, function (d) { return [d.gid_from, d.gid_to]; })
-                .style('stroke', function (d) {
-                    var fromFeatureX = _.findWhere(features, {id: d.gid_from}).geometry.coordinates[0],
-                        toFeatureX = _.findWhere(features, {id: d.gid_to}).geometry.coordinates[0];
-                    return d.value === 0 ?  'rgba(165,165,165,0.6)' : fromFeatureX < toFeatureX ?  'url(#export-import)' : 'url(#export-import-inverse)';
-                })
-                .classed('active', function (d) { return !!d.value; })
-                .classed('hidden', function (d) {
-                    var hasConflicts = hasRenderConflicts(d);
-
-                    var notSelected = (selectedGeography &&
-                    (d.gid_from !== selectedGeography) &&
-                    (d.gid_to !== selectedGeography));
-
-                    var typeExcluded = excludedFlowTypes.indexOf('Interstate_DC') !== -1;
-
-
-                    return hasConflicts || notSelected || typeExcluded;
-                })
-                .transition()
-                .ease('linear')
-                .duration(transitionDuration)
-                .style('stroke-width', function (d) {
-                    return d.value ? lineScale(d.value) : 0;
-                });
+            // this.mapOptions.layers.line
+            //     .selectAll('.Interstate_DC')
+            //     .data(dcData, function (d) { return [d.gid_from, d.gid_to]; })
+            //     .style('stroke', function (d) {
+            //         var fromFeatureX = _.findWhere(features, {id: d.gid_from}).geometry.coordinates[0],
+            //             toFeatureX = _.findWhere(features, {id: d.gid_to}).geometry.coordinates[0];
+            //         return d.value === 0 ?  'rgba(165,165,165,0.6)' : fromFeatureX < toFeatureX ?  'url(#export-import)' : 'url(#export-import-inverse)';
+            //     })
+            //     .classed('active', function (d) { return !!d.value; })
+            //     .classed('hidden', function (d) {
+            //         var hasConflicts = hasRenderConflicts(d);
+            //
+            //         var notSelected = (selectedGeography &&
+            //         (d.gid_from !== selectedGeography) &&
+            //         (d.gid_to !== selectedGeography));
+            //
+            //         var typeExcluded = excludedFlowTypes.indexOf('Interstate_DC') !== -1;
+            //
+            //
+            //         return hasConflicts || notSelected || typeExcluded;
+            //     })
+            //     .transition()
+            //     .ease(d3.easeLinear)
+            //     .duration(transitionDuration)
+            //     .style('stroke-width', function (d) {
+            //         return d.value ? lineScale(d.value) : 0;
+            //     });
 
             this.mapOptions.layers.line
                 .selectAll('.Interstate_AC')
@@ -44348,9 +44375,9 @@ define('scripts/views/MapView',[
                     return hasConflicts || notSelected || typeExcluded;
                 })
                 .transition()
-                .ease('linear')
+                .ease(d3.easeLinear)
                 .duration(transitionDuration)
-                .style('stroke-width', function (d) {
+                .attr('stroke-width', function (d) {
                     return d.value ? lineScale(d.value) : 0;
                 });
 
@@ -44371,9 +44398,9 @@ define('scripts/views/MapView',[
                 })
                 .classed('active', function (d) { return !!d.value; })
                 .transition()
-                .ease('linear')
+                .ease(d3.easeLinear)
                 .duration(transitionDuration)
-                .style('stroke-width', function (d) {
+                .attr('stroke-width', function (d) {
                     return d.value ? lineScale(d.value) : 0;
                 });
 
@@ -44384,12 +44411,12 @@ define('scripts/views/MapView',[
                 });
                 var conflictsWithAC = (acOpposite && (acOpposite.value !== 0));
 
-                var dcOpposite = _.findWhere(dcData, {
-                    gid_to: d.gid_from,
-                    gid_from: d.gid_to
-                });
-                var conflictsWithDC = (dcOpposite && (dcOpposite.value !== 0));
-                return (conflictsWithAC || conflictsWithDC) && (d.value === 0)
+                // var dcOpposite = _.findWhere(dcData, {
+                //     gid_to: d.gid_from,
+                //     gid_from: d.gid_to
+                // });
+                // var conflictsWithDC = (dcOpposite && (dcOpposite.value !== 0));
+                return (conflictsWithAC/* || conflictsWithDC*/) && (d.value === 0)
             }
         },
 
@@ -44858,7 +44885,7 @@ define('scripts/views/MapLegendView',[
                         return b.value - a.value;
                     });
 
-                var lineElements = _.chain([2000, 6000, 10000])
+                var lineElements = _.chain([500, 1000, 4000])
                     .map(function (value) {
                         return {
                             width: lineScale(value),
@@ -45169,7 +45196,6 @@ define('scripts/views/DispatchStackChart',[
           return o.gid == clickedGeography;
         });
       }
-
       //TODO: This won't be necessary once load has been parsed out
       return _.filter(rawData, function (o) {
         return o.fuel_id != 'load';
@@ -45466,9 +45492,9 @@ define('scripts/views/DispatchStackChart',[
     shiftChart: function () {
 
       // TODO: Remove this to update flow chart
-      if (Radio.request('currentMetric').id != 'generation') {
-        return;
-      }
+      // if (Radio.request('currentMetric').id != 'generation') {
+      //   return;
+      // }
 
       var self = this;
 
@@ -45599,9 +45625,9 @@ define('scripts/views/DispatchStackChart',[
 
     updateTemporalValue: function () {
       //TODO: Remove this to update flow chart
-      if (Radio.request('currentMetric').id != 'generation') {
-        return;
-      }
+      // if (Radio.request('currentMetric').id != 'generation') {
+      //   return;
+      // }
 
       var temporalValue = Radio.request('currentTemporalValue'),
           hour = String(temporalValue.getUTCHours()),
@@ -45961,350 +45987,351 @@ define('scripts/views/ZonalGenerationChart',[
  */
 
 define('scripts/views/TimeChartView',[
-    'jquery',
-    'd3',
-    'underscore',
-    'marionette',
-    'templates',
-    'appConfig',
-    'scripts/views/DispatchStackChart',
-    'scripts/views/ZonalGenerationChart',
-    'scripts/views/CumulativeTableView',
-    'parsers',
-    'radio'
+  'jquery',
+  'd3',
+  'underscore',
+  'marionette',
+  'templates',
+  'appConfig',
+  'scripts/views/DispatchStackChart',
+  'scripts/views/ZonalGenerationChart',
+  'scripts/views/CumulativeTableView',
+  'parsers',
+  'radio'
 ], function ($, d3, _, Mn, Templates, CONFIG, DispatchStackChart, ZonalGenerationChart, CumulativeTableView, Parsers, Radio) {
 
 
-    // TODO: Use the configuration directly to set up a color scale
-    return Mn.LayoutView.extend({
-        template: Templates['timeChart'],
+  // TODO: Use the configuration directly to set up a color scale
+  return Mn.LayoutView.extend({
+    template: Templates['timeChart'],
 
-        className: 'stretch-v',
+    className: 'stretch-v',
 
-        _cachedTemporalIdx: 0,
+    _cachedTemporalIdx: 0,
 
-        regions: {
-            timeDisplay: '#gtg-time-display',
-            geographyDropdown: '#gtg-geography-dropdown',
-            geographyDropdown2: '#gtg-geography-dropdown-2',
-            chart: '#time-chart-container',
-            chart2: '#time-chart-container-2'
-        },
+    regions: {
+      timeDisplay: '#gtg-time-display',
+      geographyDropdown: '#gtg-geography-dropdown',
+      geographyDropdown2: '#gtg-geography-dropdown-2',
+      chart: '#time-chart-container',
+      chart2: '#time-chart-container-2'
+    },
 
-        ui: {
-            scenario2Option: '.scenario-2-option',
-            toggleComparison: '#toggle-chart-comparison',
-            regionOption: '.region-option'
-        },
+    ui: {
+      scenario2Option: '.scenario-2-option',
+      toggleComparison: '#toggle-chart-comparison',
+      regionOption: '.region-option'
+    },
 
-        events: {
-            'change @ui.toggleComparison': 'onToggleComparisonChange',
-            'change @ui.scenario2Option': 'onScenario2Click',
-            'change @ui.regionOption': 'onRegionChange'
-        },
+    events: {
+      'change @ui.toggleComparison': 'onToggleComparisonChange',
+      'change @ui.scenario2Option': 'onScenario2Click',
+      'change @ui.regionOption': 'onRegionChange'
+    },
 
-        childEvents: {
-            'click:option': 'updateCurrentGeography',
-        },
+    childEvents: {
+      'click:option': 'updateCurrentGeography',
+    },
 
-        serializeData: function () {
+    serializeData: function () {
 
-            var currentMetric = Radio.request('currentMetric');
-            var dataFormat = Radio.request('dataFormat:scenario');
-            var currentGeography = Radio.request('clickedGeography'),
-                currentGeography2 = Radio.request('clickedGeography2');
+      var currentMetric = Radio.request('currentMetric');
+      var dataFormat = Radio.request('dataFormat:scenario');
+      var currentGeography = Radio.request('clickedGeography'),
+          currentGeography2 = Radio.request('clickedGeography2');
 
-            var currentScenario = Radio.request('currentScenario').split('_'),
-                currentScenarioName = _.findWhere(CONFIG.scenarioNames, {id: currentScenario[0]}),
-                currentYear = _.findWhere(CONFIG.years, {id: parseInt(currentScenario[1])});
+      var currentScenario = Radio.request('currentScenario').split('_'),
+          currentScenarioName = _.findWhere(CONFIG.scenarioNames, {id: currentScenario[0]}),
+          currentYear = _.findWhere(CONFIG.years, {id: parseInt(currentScenario[1])});
 
-            var currentScenario2,
-                currentScenarioName2,
-                currentYear2;
+      var currentScenario2,
+          currentScenarioName2,
+          currentYear2;
 
-            var scenarioNameOptions = [],
-                yearOptions = [];
+      var scenarioNameOptions = [],
+          yearOptions = [];
 
-            var comparison = Radio.request('chartComparison') && (currentMetric.id === 'generation');
+      var comparison = Radio.request('chartComparison') && (currentMetric.id === 'generation');
 
-            var regions = [];
-            if (currentMetric.id === 'generation') {
-                regions = (Radio.request('data:scenario'))
-                    .map(function (o) {
-                        return o.gid
-                    })
-                    .reduce(function (agg, gid) {
-                        var newAgg = agg.slice();
-                        if (agg.indexOf(gid) === -1) newAgg.push(gid)
-                        return newAgg;
-                    }, [])
-                    .sort()
+      var regions = [];
+      if (currentMetric.id === 'generation') {
+        regions = (Radio.request('data:scenario'))
+            .map(function (o) {
+              return o.gid
+            })
+            .reduce(function (agg, gid) {
+              var newAgg = agg.slice();
+              if (agg.indexOf(gid) === -1) newAgg.push(gid)
+              return newAgg;
+            }, [])
+            .sort()
+      }
+      regions.unshift('National');
+
+      if (comparison) {
+
+        currentScenario2 = Radio.request('currentScenario2').split('_');
+        currentScenarioName2 = currentScenario2[0];
+        currentYear2 = currentScenario2[1];
+
+        scenarioNameOptions = CONFIG.scenarioNames;
+        yearOptions = CONFIG.years;
+      }
+
+      return {
+        units: dataFormat ? dataFormat.units : '',
+        metricId: currentMetric.id,
+        metricLabel: currentMetric.name,
+        region1Label: currentGeography ? currentGeography : 'National',
+        scenarios: CONFIG.scenarios,
+        currentScenario: Radio.request('currentScenario'),
+        comparison: comparison,
+        scenarioNameOptions: scenarioNameOptions,
+        yearOptions: yearOptions,
+        currentScenarioName: currentScenarioName,
+        currentYear: currentYear,
+        currentScenarioName2: currentScenarioName2,
+        currentYear2: currentYear2,
+        regions: regions,
+        currentGeography: currentGeography,
+        currentGeography2: currentGeography2,
+        currentDisplayOption: Radio.request('currentDisplayOption')
+      }
+    },
+
+    chartRedrawEnabled: true,
+
+    initialize: function () {
+      this._setListeners();
+    },
+
+    onShow: function () {
+
+      this._adjustSizes();
+
+      var currentMetric = Radio.request('currentMetric'),
+          currentDisplayOption = Radio.request('currentDisplayOption');
+      // Get the chart and legend views based on the current metric
+      if (currentDisplayOption.id === 'table') {
+
+        var cumulativeData = Radio.request('data:annual').map(function (cumulativeObj) {
+          var configObj = _.findWhere(CONFIG.attributes, {id: cumulativeObj.id});
+
+          // Determine rows
+          var rows = [];
+          if (typeof cumulativeObj.data[0] === 'object') {
+            rows = cumulativeObj.data.map(function (rowObj) {
+              var rowConfigObj = _.findWhere(CONFIG.fuelTypes, {id: rowObj.fuel_id}) ||
+                  _.findWhere(CONFIG.attributes, {id: rowObj.fuel_id});
+
+              var value = (value < 10 && value > -10) ? rowObj.values[0].toPrecision(2) :
+                  Number(Number(rowObj.values[0]).toPrecision(2));
+              return {
+                label: rowConfigObj.name || rowConfigObj.label,
+                value: Number(Number(rowObj.values[0]).toPrecision(2))
+              }
+            });
+          }
+
+          // Calculate totals
+          var totals;
+
+          if (cumulativeObj.id === 'generation') {
+            var genTotal = rows
+                .filter(function (o) {
+                  return o.label !== 'Curtailment';
+                })
+                .reduce(function (sumObj, o) {
+                  sumObj.value += o.value;
+                  return sumObj;
+                }, {label: 'Total Generation', value: 0});
+            var curtailmentTotal = _.findWhere(rows, {label: 'Curtailment'});
+            curtailmentTotal.value = -curtailmentTotal.value;
+            var loadTotal = {
+              label: 'Total Load',
+              value: genTotal.value + curtailmentTotal.value
             }
-            regions.unshift('National');
 
+            totals = [
+              genTotal,
+              curtailmentTotal,
+              loadTotal
+            ];
 
-            if (comparison) {
+            rows = rows.filter(function (o) {
+              return o.label !== 'Curtailment';
+            })
+          } else {
+            if (rows.length) {
+              totals = rows.reduce(function (sumObj, o) {
+                sumObj.value += o.value;
+                return sumObj;
+              }, {label: 'Total', value: 0})
+              totals.value = Number(Number(totals.value).toPrecision(2));
+              totals = [totals];
 
-                currentScenario2 = Radio.request('currentScenario2').split('_');
-                currentScenarioName2 = currentScenario2[0];
-                currentYear2 = currentScenario2[1];
-
-                scenarioNameOptions = CONFIG.scenarioNames;
-                yearOptions = CONFIG.years;
-            }
-
-            return {
-                units: dataFormat ? dataFormat.units : '',
-                metricId: currentMetric.id,
-                metricLabel: currentMetric.name,
-                region1Label: currentGeography ? currentGeography : 'National',
-                scenarios: CONFIG.scenarios,
-                currentScenario: Radio.request('currentScenario'),
-                comparison: comparison,
-                scenarioNameOptions: scenarioNameOptions,
-                yearOptions: yearOptions,
-                currentScenarioName: currentScenarioName,
-                currentYear: currentYear,
-                currentScenarioName2: currentScenarioName2,
-                currentYear2: currentYear2,
-                regions: regions,
-                currentGeography: currentGeography,
-                currentGeography2: currentGeography2,
-                currentDisplayOption: Radio.request('currentDisplayOption')
-            }
-        },
-
-        chartRedrawEnabled: true,
-        
-        initialize: function () {
-            this._setListeners();
-        },
-
-        onShow: function () {
-
-            this._adjustSizes();
-
-            var currentMetric = Radio.request('currentMetric'),
-                currentDisplayOption = Radio.request('currentDisplayOption');
-            // Get the chart and legend views based on the current metric
-            if (currentDisplayOption.id === 'table') {
-
-
-                var cumulativeData = Radio.request('data:annual').map(function (cumulativeObj) {
-                    var configObj = _.findWhere(CONFIG.attributes, {id: cumulativeObj.id});
-
-                    // Determine rows
-                    var rows = [];
-                    if (typeof cumulativeObj.data[0] === 'object') {
-                        rows = cumulativeObj.data.map(function (rowObj) {
-                            var rowConfigObj = _.findWhere(CONFIG.fuelTypes, {id: rowObj.fuel_id}) ||
-                                _.findWhere(CONFIG.attributes, {id: rowObj.fuel_id});
-                            
-                            var value = (value < 10 && value > -10) ? rowObj.values[0].toPrecision(2) :
-                                Number(Number(rowObj.values[0]).toPrecision(2));
-                            return {
-                                label: rowConfigObj.name || rowConfigObj.label,
-                                value: Number(Number(rowObj.values[0]).toPrecision(2))
-                            }
-                        });
-                    }
-
-                    // Calculate totals
-                    var totals;
-
-                    if (cumulativeObj.id === 'generation') {
-                        var genTotal = rows
-                            .filter(function (o) {
-                                return o.label !== 'Curtailment';
-                            })
-                            .reduce(function (sumObj, o) {
-                                sumObj.value += o.value;
-                                return sumObj;
-                            }, {label: 'Total Generation', value: 0});
-                        var curtailmentTotal = _.findWhere(rows, {label: 'Curtailment'});
-                        curtailmentTotal.value = -curtailmentTotal.value;
-                        var loadTotal = {
-                            label: 'Total Load',
-                            value: genTotal.value + curtailmentTotal.value
-                        }
-
-                        totals = [
-                            genTotal,
-                            curtailmentTotal,
-                            loadTotal
-                        ];
-
-                        rows = rows.filter(function (o) {
-                            return o.label !== 'Curtailment';
-                        })
-                    } else {
-                        if (rows.length) {
-                            totals = rows.reduce(function (sumObj, o) {
-                                sumObj.value += o.value;
-                                return sumObj;
-                            }, {label: 'Total', value: 0})
-                          totals.value = Number(Number(totals.value).toPrecision(2));
-                            totals = [totals];
-
-                        } else {
-                            totals = [{
-                                label: 'Total',
-                                value: Number(Number(cumulativeObj.data[0]).toPrecision(2))
-                            }];
-                        }
-                    }
-
-
-                    return {
-                        label: configObj.name,
-                        units: configObj.units,
-                        rows: rows,
-                        totals: totals
-                    }
-                });
-
-                var leftData = cumulativeData.filter(function (o) { return o.label === 'Generation'});
-                var rightData = cumulativeData.filter(function (o) { return o.label !== 'Generation'});
-
-                var leftView = new CumulativeTableView({
-                    tableData: leftData
-                });
-                var rightView = new CumulativeTableView({
-                    tableData: rightData
-                });
-
-                this.showChildView('chart', leftView);
-                this.showChildView('chart2', rightView);
-
-                // this.chart.empty();
             } else {
-                var chartView;
-
-                if (currentMetric.id === 'generation') {
-                    chartView = DispatchStackChart;
-                } else if (currentMetric.id === 'interstate_flow') {
-                    chartView = ZonalGenerationChart;
-                }
-
-                if (currentMetric.id == 'generation') {
-                    this.$el.find('.gtg-chart-dropdown-container-1').removeClass('disabled');
-                } else {
-                    this.$el.find('.gtg-chart-dropdown-container-1').addClass('disabled');
-                }
-
-                this.calculateDimensions(this.comparison);
-
-                if (Radio.request('chartComparison') && (currentMetric.id === 'generation')) {
-                    this.showChildView('chart2', new chartView({
-                        divId: 'dispatch-stack-chart-2',
-                        parentView: this
-                    }))
-                }
-
-                this.showChildView('chart', new chartView({
-                    divId: 'dispatch-stack-chart',
-                    parentView: this
-                }));
+              totals = [{
+                label: 'Total',
+                value: Number(Number(cumulativeObj.data[0]).toPrecision(2))
+              }];
             }
-        },
+          }
 
-        _setListeners: function () {
-            
-            Radio.listen(this, 'data:ready', this.reRender.bind(this));
+          return {
+            label: configObj.name,
+            units: configObj.units,
+            rows: rows,
+            totals: totals
+          }
+        });
 
-            Radio.listen(this, 'change:chartComparison', this.reRender.bind(this))
-            Radio.listen(this, 'change:clickedGeography', this.reRender.bind(this));
-            Radio.listen(this, 'change:clickedGeography2', this.reRender.bind(this));
-            Radio.listen(this, 'change:currentDisplayOption', this.reRender.bind(this));
-        },
+        var leftData = cumulativeData.filter(function (o) {
+          return o.label === 'Generation'
+        });
+        var rightData = cumulativeData.filter(function (o) {
+          return o.label !== 'Generation'
+        });
 
-        _adjustSizes: function () {
-            var windowHeight = $(window).height(),
-                windowWidth = $(window).width();
-            var timeChartContainer = this.$el.find('.time-chart-container'),
-                comparisonContainer = this.$el.find('.time-chart-container.comparison');
+        var leftView = new CumulativeTableView({
+          tableData: leftData
+        });
+        var rightView = new CumulativeTableView({
+          tableData: rightData
+        });
 
-            if (windowHeight < 900) {
-                timeChartContainer.css('height', '230px');
-            }
-            if (windowWidth < 1240) {
-                timeChartContainer.css('width', '560px');
-                comparisonContainer.css('width', '275px');
-                $('.main-header').css('width', '275px');
-                $('.comparison-window').css('width', '275px');
-            }
-        },
+        this.showChildView('chart', leftView);
+        this.showChildView('chart2', rightView);
 
-        calculateDimensions: function () {
+        // this.chart.empty();
+      } else {
+        var chartView;
 
-            var currentMetric = Radio.request('currentMetric').id;
-            var $chart = this.$el.find('.gtg-chart'),
-                $title = this.$el.find('.main-title');
-            if (currentMetric == 'generation') {
-                $chart.outerHeight(this.$el.outerHeight() - $title.outerHeight() - 40);
-            } else {
-                $chart.outerHeight(this.$el.outerHeight() - $title.outerHeight())
-            }
+        // if (currentMetric.id === 'generation') {
+        //     chartView = DispatchStackChart;
+        // } else if (currentMetric.id === 'interstate_flow') {
+        //     chartView = ZonalGenerationChart;
+        // }
+        chartView = DispatchStackChart;
 
-        },
-
-        updateCurrentGeography: function (child, geography) {
-
-            geography = geography == 'National' ? null : geography;
-            if (child.elementId == 'gtg-time-chart-geography-2') {
-                Radio.execute('setClickedGeography2', geography);
-            } else {
-                Radio.execute('setClickedGeography', geography);
-            }
-
-        },
-
-        handleScenarioChange: function (e) {
-            var scenarioId = $(e.target).attr('data-option');
-            Radio.execute('setCurrentScenario', scenarioId);
-        },
-        handleScenario2Change: function (e) {
-            var scenarioId = $(e.target).attr('data-option');
-            Radio.execute('setCurrentScenario2', scenarioId);
-        },
-        onRegionChange: function (e) {
-            var regionId = e.target.value;
-            var attribute = $(e.target).attr('data-filter')
-            regionId = regionId === 'National' ? null : regionId;
-
-            console.log(attribute)
-            Radio.execute('set' + attribute, regionId)
-        },
-
-        onToggleComparisonChange: function (e) {
-            var comparison = e.target.checked;
-            Radio.execute('setChartComparison', comparison);
-        },
-        onScenario2Click: function (e) {
-            var optionId = e.target.value,
-                filterType = $(e.target).attr('data-filter')
-            var currentScenario = Radio.request('currentScenario2').split('_')
-
-            switch (filterType) {
-                case 'reMix':
-                    currentScenario.splice(0,1, optionId)
-                    break
-                case 'dispatch':
-                    currentScenario.splice(1,1, optionId)
-                    break
-                case 'coalFlex':
-                    currentScenario.splice(2,1, optionId)
-                    break
-            }
-            Radio.execute('setCurrentScenario2', currentScenario.join('_'));
-        },
-
-        reRender: function () {
-            this.render();
-            this.onShow();
+        if (currentMetric.id == 'generation') {
+          this.$el.find('.gtg-chart-dropdown-container-1').removeClass('disabled');
+        } else {
+          this.$el.find('.gtg-chart-dropdown-container-1').addClass('disabled');
         }
 
-    });
+        this.calculateDimensions(this.comparison);
+
+        if (Radio.request('chartComparison') && (currentMetric.id === 'generation')) {
+          this.showChildView('chart2', new chartView({
+            divId: 'dispatch-stack-chart-2',
+            parentView: this
+          }))
+        }
+        this.showChildView('chart', new chartView({
+          divId: 'dispatch-stack-chart',
+          parentView: this
+        }));
+      }
+    },
+
+    _setListeners: function () {
+
+      Radio.listen(this, 'data:ready', this.reRender.bind(this));
+
+      Radio.listen(this, 'change:chartComparison', this.reRender.bind(this))
+      Radio.listen(this, 'change:clickedGeography', this.reRender.bind(this));
+      Radio.listen(this, 'change:clickedGeography2', this.reRender.bind(this));
+      Radio.listen(this, 'change:currentDisplayOption', this.reRender.bind(this));
+    },
+
+    _adjustSizes: function () {
+      var windowHeight = $(window).height(),
+          windowWidth = $(window).width();
+      var timeChartContainer = this.$el.find('.time-chart-container'),
+          comparisonContainer = this.$el.find('.time-chart-container.comparison');
+
+      if (windowHeight < 900) {
+        timeChartContainer.css('height', '230px');
+      }
+      if (windowWidth < 1240) {
+        timeChartContainer.css('width', '560px');
+        comparisonContainer.css('width', '275px');
+        $('.main-header').css('width', '275px');
+        $('.comparison-window').css('width', '275px');
+      }
+    },
+
+    calculateDimensions: function () {
+
+      var currentMetric = Radio.request('currentMetric').id;
+      var $chart = this.$el.find('.gtg-chart'),
+          $title = this.$el.find('.main-title');
+      if (currentMetric == 'generation') {
+        $chart.outerHeight(this.$el.outerHeight() - $title.outerHeight() - 40);
+      } else {
+        $chart.outerHeight(this.$el.outerHeight() - $title.outerHeight())
+      }
+
+    },
+
+    updateCurrentGeography: function (child, geography) {
+
+      geography = geography == 'National' ? null : geography;
+      if (child.elementId == 'gtg-time-chart-geography-2') {
+        Radio.execute('setClickedGeography2', geography);
+      } else {
+        Radio.execute('setClickedGeography', geography);
+      }
+
+    },
+
+    handleScenarioChange: function (e) {
+      var scenarioId = $(e.target).attr('data-option');
+      Radio.execute('setCurrentScenario', scenarioId);
+    },
+    handleScenario2Change: function (e) {
+      var scenarioId = $(e.target).attr('data-option');
+      Radio.execute('setCurrentScenario2', scenarioId);
+    },
+    onRegionChange: function (e) {
+      var regionId = e.target.value;
+      var attribute = $(e.target).attr('data-filter')
+      regionId = regionId === 'National' ? null : regionId;
+
+      console.log(attribute)
+      Radio.execute('set' + attribute, regionId)
+    },
+
+    onToggleComparisonChange: function (e) {
+      var comparison = e.target.checked;
+      Radio.execute('setChartComparison', comparison);
+    },
+    onScenario2Click: function (e) {
+      var optionId = e.target.value,
+          filterType = $(e.target).attr('data-filter')
+      var currentScenario = Radio.request('currentScenario2').split('_')
+
+      switch (filterType) {
+        case 'reMix':
+          currentScenario.splice(0, 1, optionId)
+          break
+        case 'dispatch':
+          currentScenario.splice(1, 1, optionId)
+          break
+        case 'coalFlex':
+          currentScenario.splice(2, 1, optionId)
+          break
+      }
+      Radio.execute('setCurrentScenario2', currentScenario.join('_'));
+    },
+
+    reRender: function () {
+      // this.render();
+      this.onShow();
+    }
+
+  });
 });
 /**
  * Created by jduckwor on 3/7/16.
@@ -49280,21 +49307,30 @@ require([
             // // For the interstate flow version we also need to get generation data for the chart
             //
             switch (currentMetric.id) {
-                case 'interstate_flow':
-                    App.Models.ZonalGeneration = new ZonalGenerationDataModel({
-                        id: [currentScenario, 'zones', currentTemporalType.id, 'generation'].join('_') + '.json'
-                    });
-                    break;
-                case 'generation':
-                    App.Models.NationalData = new NationalDataModel({
-                        id: [currentScenario, 'total', currentTemporalType.id, currentMetric.id].join('_') + '.json',
-                        datasetId: 'national'
-                    });
-                    App.Models.NationalData2 = new NationalDataModel({
-                        id: [currentScenario2, 'total', currentTemporalType.id, currentMetric.id].join('_') + '.json',
-                        datasetId: 'national2'
-                    });
-                    break;
+                // case 'interstate_flow':
+                //     App.Models.ZonalGeneration = new ZonalGenerationDataModel({
+                //         id: [currentScenario, 'zones', currentTemporalType.id, 'generation'].join('_') + '.json'
+                //     });
+                //     break;
+                // case 'generation':
+                //     App.Models.NationalData = new NationalDataModel({
+                //         id: [currentScenario, 'total', currentTemporalType.id, currentMetric.id].join('_') + '.json',
+                //         datasetId: 'national'
+                //     });
+                //     App.Models.NationalData2 = new NationalDataModel({
+                //         id: [currentScenario2, 'total', currentTemporalType.id, currentMetric.id].join('_') + '.json',
+                //         datasetId: 'national2'
+                //     });
+                //     break;
+              default:
+                App.Models.NationalData = new NationalDataModel({
+                  id: [currentScenario, 'total', currentTemporalType.id, 'generation'].join('_') + '.json',
+                  datasetId: 'national'
+                });
+                App.Models.NationalData2 = new NationalDataModel({
+                  id: [currentScenario2, 'total', currentTemporalType.id, 'generation'].join('_') + '.json',
+                  datasetId: 'national2'
+                });
             }
 
             // Listen for the fetch event and wait until all models are ready before initializing the app
