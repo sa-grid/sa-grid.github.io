@@ -16118,15 +16118,6 @@ define('appConfig',{
 		},
 		{
 			"color": [
-				39,
-				39,
-				40
-			],
-			"id": "NonEskom_Coal",
-			"label": "Non-Eskom Coal"
-		},
-		{
-			"color": [
 				240,
 				183,
 				32
@@ -16154,15 +16145,6 @@ define('appConfig',{
 		},
 		{
 			"color": [
-				200,
-				200,
-				200
-			],
-			"id": "CAES",
-			"label": "CAES"
-		},
-		{
-			"color": [
 				0,
 				127,
 				31
@@ -16178,15 +16160,6 @@ define('appConfig',{
 			],
 			"id": "Biogas",
 			"label": "Biogas"
-		},
-		{
-			"color": [
-				40,
-				168,
-				72
-			],
-			"id": "Landfill",
-			"label": "Landfill"
 		},
 		{
 			"color": [
@@ -16217,15 +16190,6 @@ define('appConfig',{
 		},
 		{
 			"color": [
-				136,
-				188,
-				204
-			],
-			"id": "NonEskom_Hydro",
-			"label": "Non-Eskom Hydro"
-		},
-		{
-			"color": [
 				116,
 				80,
 				194
@@ -16244,30 +16208,32 @@ define('appConfig',{
 		},
 		{
 			"color": [
-				242,
-				165,
-				181
-			],
-			"id": "NonEskom__Gas",
-			"label": "Non-Eskom Gas"
-		},
-		{
-			"color": [
-				255,
-				255,
-				255
-			],
-			"id": "NonEskom_PumpStorage",
-			"label": "Non-Eskom Pumped Storage"
-		},
-		{
-			"color": [
 				225,
 				225,
 				225
 			],
 			"id": "PumpStorage",
 			"label": "Pumped Storage"
+		}
+	],
+	"exportTypes": [
+		{
+			"id": "exporter",
+			"color": [
+				45,
+				119,
+				185
+			],
+			"label": "Net Exporter"
+		},
+		{
+			"id": "importer",
+			"color": [
+				221,
+				35,
+				24
+			],
+			"label": "Net Importer"
 		}
 	],
 	"metrics": [
@@ -38494,9 +38460,7 @@ __p += '\n  <div class="legend-row">\n   <svg height="' +
  });
 __p += '\n  <footer class="export-import-row">\n   <label>Exporter</label>\n   <label>Importer</label>\n  </footer>\n </section>\n <section class="flow-type-legend">\n  <div class="legend-row">\n   <input type="checkbox"\n          class="flow-type-checkbox"\n          data-flowType="Interstate_AC"\n          ' +
 ((__t = ( flowExclusions.indexOf('Interstate_AC') === -1 ? 'checked' : '')) == null ? '' : __t) +
-'\n   >\n   <label for="">AC</label>\n   <svg height="10" width="60">\n    <path d="M0,5L60,5"\n          stroke-width="10"\n          class="flow-type-legend-line"\n          stroke="rgb(55,55,55)"></path>\n    <path d="M0,5L60,5" stroke-width="10"\n          class="flow-type-legend-line"\n          stroke-dasharray="2,2"\n          stroke="rgba(165,165,165,0.6)"></path>\n   </svg>\n  </div>\n  <div class="legend-row">\n   <input\n           type="checkbox"\n           class="flow-type-checkbox"\n           data-flowType="Interstate_DC"\n           ' +
-((__t = ( flowExclusions.indexOf('Interstate_DC') === -1 ? 'checked' : '')) == null ? '' : __t) +
-'\n   >\n   <label for="">DC</label>\n   <svg height="10" width="60">\n    <path d="M0,5L60,5"\n          stroke-width="10"\n          stroke-dasharray="4,4"\n          stroke="rgb(55,55,55)"\n          class="flow-type-legend-line"></path>\n   </svg>\n  </div>\n </section>\n ';
+'\n   >\n   <label for="">AC</label>\n   <svg height="10" width="60">\n    <path d="M0,5L60,5"\n          stroke-width="10"\n          class="flow-type-legend-line"\n          stroke="rgb(55,55,55)"></path>\n    <path d="M0,5L60,5" stroke-width="10"\n          class="flow-type-legend-line"\n          stroke-dasharray="2,2"\n          stroke="rgba(165,165,165,0.6)"></path>\n   </svg>\n  </div>\n </section>\n ';
  } ;
 __p += '\n</section>';
 
@@ -44195,7 +44159,7 @@ define('scripts/views/MapView',[
         },
 
         _createProjection: function () {
-            // console.log(d3)
+
             var projectionName = 'geo' + this.mapOptions.projectionOptions.id,
                 projection = d3[projectionName]();
 
@@ -44323,9 +44287,10 @@ define('scripts/views/MapView',[
                 return {
                     gid_from: value >= 0 ? o.gid_from : o.gid_to,
                     gid_to: value >= 0 ? o.gid_to : o.gid_from,
-                    value: Math.abs(o.values[temporalIdx])
+                    value: Math.abs(value)
                 }
             });
+
 
             // this.mapOptions.layers.line
             //     .selectAll('.Interstate_DC')
@@ -44355,9 +44320,14 @@ define('scripts/views/MapView',[
             //         return d.value ? lineScale(d.value) : 0;
             //     });
 
+
             this.mapOptions.layers.line
                 .selectAll('.Interstate_AC')
-                .data(acData, function (d) { return [d.gid_from, d.gid_to]; })
+                .data(acData, function (d) {
+                    var from = d.value > 0 ? d.gid_from : d.gid_to;
+                    var to = d.value > 0 ? d.gid_to : d.gid_from;
+                    return [from, to];
+                })
                 .style('stroke', function (d) {
                     var fromFeatureX = _.findWhere(features, {id: d.gid_from}).geometry.coordinates[0],
                         toFeatureX = _.findWhere(features, {id: d.gid_to}).geometry.coordinates[0];
@@ -44383,7 +44353,11 @@ define('scripts/views/MapView',[
 
             this.mapOptions.layers.line
                 .selectAll('.Interstate_AC-animation')
-                .data(acData, function (d) { return [d.gid_from, d.gid_to]; })
+                .data(acData, function (d) {
+                  var from = d.value > 0 ? d.gid_from : d.gid_to;
+                  var to = d.value > 0 ? d.gid_to : d.gid_from;
+                  return [from, to];
+                })
                 .classed('hidden', function (d) {
                     var hasConflicts = hasRenderConflicts(d);
 
@@ -44392,7 +44366,6 @@ define('scripts/views/MapView',[
                     (d.gid_to !== selectedGeography));
 
                     var typeExcluded = excludedFlowTypes.indexOf('Interstate_AC') !== -1;
-
 
                     return hasConflicts || notSelected || typeExcluded;
                 })
@@ -44593,7 +44566,7 @@ define('scripts/views/MapView',[
             } else if (currentMetric.id == 'interstate_flow') {
                 pointData = _.mapObject(Radio.request('data:scenario'), function (arr) {
                    return _.filter(arr, function (o) {
-                       return o.gid_from == d.id || o.gid_to == d.id;
+                       return o.gid_from == d.properties.name || o.gid_to == d.properties.name;
                    });
                 });
                 hasData = _.some(pointData, function (arr) {
@@ -45056,6 +45029,11 @@ define('scripts/views/DispatchStackChart',[
 
   return GenerationChart.extend({
 
+    initialize: function () {
+      GenerationChart.prototype.initialize.apply(this, arguments);
+      this._cachedTemporalIdx = Radio.request('currentTemporalIdx');
+    },
+
     createBaseSVG: function () {
 
       this.chartOptions.svg = d3.select(this.el).select('#' + this.divId).append('svg');
@@ -45150,6 +45128,9 @@ define('scripts/views/DispatchStackChart',[
       // Handle a time change
       Radio.listen(this, 'change:currentTemporalIdx', function () {
         var currentTemporalIdx = Radio.request('currentTemporalIdx');
+
+        console.log('currentTemoralIdx: ' + currentTemporalIdx);
+        console.log('_cachedTemporalIdx: ' + this._cachedTemporalIdx);
 
         // Check if the time has been incremented (via the player) or changed dramatically (more than 1 time step)
         var handler = Math.abs(currentTemporalIdx - this._cachedTemporalIdx) == 1 ? 'shiftChart' : 'renderChart';
@@ -45305,6 +45286,8 @@ define('scripts/views/DispatchStackChart',[
         }
       }
 
+      // console.log('Trimmed Data');
+      // console.log(data);
       return data;
     },
 
@@ -45316,13 +45299,22 @@ define('scripts/views/DispatchStackChart',[
           }))
           .order(d3.stackOrderNone);
 
-      return this.chartOptions.stack(rawData);
+      var data = this.chartOptions.stack(rawData);
+
+      // console.log('Stacked Data');
+      // console.log(data);
+
+      
+
+      return data;
     },
 
     _createFuelBands: function (parent, data) {
       var _this = this;
 
       var currentTemporalIdx = Radio.request('currentTemporalIdx');
+
+      parent.selectAll('.fuel-types').remove();
 
       var fuelBands = parent.selectAll('.fuel-types')
           .data(data, function (d) {
@@ -45334,6 +45326,10 @@ define('scripts/views/DispatchStackChart',[
       this.chartOptions.area = this.chartOptions.area || d3.area();
       this.chartOptions.area
           .x((d, i) => {
+        // if (i === 0) {
+        //   console.log(d.data.x);
+        //   console.log(x(d.data.x));
+        // }
             return x(d.data.x)
           })
           .y0(d => y(d[0]))
@@ -45349,14 +45345,16 @@ define('scripts/views/DispatchStackChart',[
             return 'rgb(' + _this.chartOptions.colorPalette[d.key].join(',') + ')';
           })
           .attr('d', function (d) {
+            if (d.key === 'CAES' || d.key === 'Landfill') { console.log(d)}
+            // console.log(d.key)
+            // console.log(_this.chartOptions.area(d))
             return _this.chartOptions.area(d);
           });
 
-      // console.log(data)
-      parent.selectAll('.fuel-types').each(function (d) {
-        d3.select(this).select('path')
-            .attr('d', _this.chartOptions.area(d));
-      })
+      // parent.selectAll('.fuel-types').each(function (d) {
+      //   d3.select(this).select('path')
+      //       .attr('d', _this.chartOptions.area(d));
+      // });
 
 
       return fuelBands;
@@ -45490,6 +45488,8 @@ define('scripts/views/DispatchStackChart',[
     },
 
     shiftChart: function () {
+      
+      console.log('shift chart');
 
       // TODO: Remove this to update flow chart
       // if (Radio.request('currentMetric').id != 'generation') {
@@ -45526,6 +45526,12 @@ define('scripts/views/DispatchStackChart',[
       var trimmedData = this._trimData(rawData);
       trimmedData = increasing ? trimmedData.slice(trimmedData.length - 1) : trimmedData.slice(0, 1);
 
+      // console.log(trimmedData)
+
+      // console.log('Increasing: ' + increasing);
+      // console.log(trimmedData);
+      
+
       var stackedData = this._stackData(trimmedData);
 
       // console.log(stackedData)
@@ -45540,6 +45546,11 @@ define('scripts/views/DispatchStackChart',[
           arr.unshift(newPoint);
         }
       });
+      //
+      // console.log(self.chartOptions.x.domain());
+      // console.log(self.chartOptions.x.range());
+      // console.log(-(currentTemporalIdx + 12));
+      // console.log(self.chartOptions.x(-(currentTemporalIdx + 12)));
 
       this.chartOptions.g.selectAll('.fuel-types')
           .data(this.chartOptions.data, function (d) {
@@ -45552,7 +45563,7 @@ define('scripts/views/DispatchStackChart',[
           .transition()
           .duration(transitionDuration)
           .ease(d3.easeLinear)
-          .attr('transform', 'translate(' + self.chartOptions.x(-(currentTemporalIdx + (12))) + ',0)');
+          .attr('transform', 'translate(' + self.chartOptions.x(-(currentTemporalIdx + 12)) + ',0)');
 
       // Remove extra data points
       _.each(self.chartOptions.data, function (arr) {
@@ -46242,7 +46253,7 @@ define('scripts/views/TimeChartView',[
       Radio.listen(this, 'change:chartComparison', this.reRender.bind(this))
       Radio.listen(this, 'change:clickedGeography', this.reRender.bind(this));
       Radio.listen(this, 'change:clickedGeography2', this.reRender.bind(this));
-      Radio.listen(this, 'change:currentDisplayOption', this.reRender.bind(this));
+      // Radio.listen(this, 'change:currentDisplayOption', this.reRender.bind(this));
     },
 
     _adjustSizes: function () {
@@ -48850,23 +48861,28 @@ define('scripts/views/MapPopupView',[
                     var geographyData = _.reduce(arr, function (result, o) {
                                 var value = o.values[currentTemporalIdx],
                                     typeName = key == 'Interstate_AC' ?'AC' : 'DC';
-                                if (_this.data.gid == o.gid_from && value) {
+                                if (value) {
 
-                                    result.exports.push({
-                                        gid: o.gid_to,
-                                        value: value,
+                                    if (
+                                        ((_this.data.gid === o.gid_from) && (value > 0)) ||
+                                        ((_this.data.gid === o.gid_to) && (value < 0))
+                                    ) {
+                                      result.exports.push({
+                                        gid: value > 0 ? o.gid_to : o.gid_from,
+                                        value: Math.abs(value),
                                         typeName: typeName,
                                         color: 'rgb(' + _.findWhere(CONFIG.exportTypes, {id: 'exporter'}).color.join(',') + ')',
                                         strokeDasharray: key === 'Interstate_DC' ? '3,3' : ''
-                                    })
-                                } else if (value) {
-                                    result.imports.push({
-                                        gid: o.gid_from,
-                                        value: value,
+                                      })
+                                    } else {
+                                      result.imports.push({
+                                        gid: value > 0 ? o.gid_from : o.gid_to,
+                                        value: Math.abs(value),
                                         typeName: typeName,
                                         color: 'rgb(' + _.findWhere(CONFIG.exportTypes, {id: 'importer'}).color.join(',') + ')',
                                         strokeDasharray: key === 'Interstate_DC' ? '4,4' : ''
-                                    })
+                                      })
+                                    }
                                 }
                                 return result;
                             }, {imports: [], exports: []});
@@ -49078,7 +49094,6 @@ define('scripts/views/AppLayoutView',[
         },
 
         onRender: function () {
-
             this._adjustSizes();
 
             // this.showChildView('cumulativeTable', new CumulativeTableView());
